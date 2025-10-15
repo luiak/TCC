@@ -1,0 +1,127 @@
+-- Banco de dados: calendario
+-- phpMyAdmin SQL
+
+CREATE DATABASE IF NOT EXISTS calendario CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+USE calendario;
+
+-- Tabela de Professores
+CREATE TABLE IF NOT EXISTS professor (
+    IDprofessor INT AUTO_INCREMENT PRIMARY KEY,
+    nome_professor VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    telefone VARCHAR(20),
+    especialidade VARCHAR(100),
+    carga_horaria_semanal INT DEFAULT 40,
+    status ENUM('ativo', 'inativo') DEFAULT 'ativo',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabela de Cursos
+CREATE TABLE IF NOT EXISTS cursos (
+    IDcurso INT AUTO_INCREMENT PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    turno ENUM('Manhã', 'Tarde', 'Noite') NOT NULL,
+    dias_semana SET('Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado') NOT NULL,
+    carga_horaria_total INT NOT NULL,
+    data_inicio DATE NOT NULL,
+    data_fim DATE NOT NULL,
+    status ENUM('ativo', 'concluído', 'cancelado') DEFAULT 'ativo',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabela de Competências
+CREATE TABLE IF NOT EXISTS competencias (
+    IDcompetencia INT AUTO_INCREMENT PRIMARY KEY,
+    nome AS competencia VARCHAR(150) NOT NULL,
+    descricao TEXT,
+    carga_horaria INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabela de relação Curso-Competência
+CREATE TABLE IF NOT EXISTS competencia_comp (
+    IDcompetencia INT,
+    IDcurso INT,
+    ordem INT,
+    PRIMARY KEY (IDcompetencia, IDcurso),
+    FOREIGN KEY (IDcompetencia) REFERENCES competencias(IDcompetencia) ON DELETE CASCADE,
+    FOREIGN KEY (IDcurso) REFERENCES cursos(IDcurso) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabela de relação Professor-Competência
+CREATE TABLE IF NOT EXISTS professor_competencia (
+    IDprofessor INT,
+    IDcompetencia INT,
+    nivel_conhecimento ENUM('básico', 'intermediário', 'avançado', 'expert') DEFAULT 'intermediário',
+    PRIMARY KEY (IDprofessor, IDcompetencia),
+    FOREIGN KEY (IDprofessor) REFERENCES professor(IDprofessor) ON DELETE CASCADE,
+    FOREIGN KEY (IDcompetencia) REFERENCES competencias(IDcompetencia) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabela de Agenda (Aulas agendadas)
+CREATE TABLE IF NOT EXISTS agenda (
+    IDagenda INT AUTO_INCREMENT PRIMARY KEY,
+    IDprofessor INT NOT NULL,
+    IDcurso INT NOT NULL,
+    IDcompetencia INT NOT NULL,
+    data_aula DATE NOT NULL,
+    hora_inicio TIME NOT NULL,
+    hora_fim TIME NOT NULL,
+    sala VARCHAR(50),
+    status ENUM('agendado', 'realizado', 'cancelado') DEFAULT 'agendado',
+    observacoes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (IDprofessor) REFERENCES professor(IDprofessor) ON DELETE CASCADE,
+    FOREIGN KEY (IDcurso) REFERENCES cursos(IDcurso) ON DELETE CASCADE,
+    FOREIGN KEY (IDcompetencia) REFERENCES competencias(IDcompetencia) ON DELETE CASCADE,
+    INDEX idx_data (data_aula),
+    INDEX idx_professor (IDprofessor),
+    INDEX idx_curso (IDcurso)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabela de Conflitos (para registrar conflitos detectados)
+CREATE TABLE IF NOT EXISTS conflitos (
+    IDconflito INT AUTO_INCREMENT PRIMARY KEY,
+    IDprofessor INT NOT NULL,
+    data_conflito DATE NOT NULL,
+    hora_inicio TIME NOT NULL,
+    hora_fim TIME NOT NULL,
+    tipo_conflito ENUM('sobreposição', 'carga_horaria', 'disponibilidade') NOT NULL,
+    descricao TEXT,
+    resolvido BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (IDprofessor) REFERENCES professor(IDprofessor) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Inserir dados de exemplo
+INSERT INTO professor (nome_professor, email, telefone, especialidade, carga_horaria_semanal) VALUES
+('João Silva', 'joao.silva@senai.br', '(41) 99999-0001', 'Programação Web', 40),
+('Maria Santos', 'maria.santos@senai.br', '(41) 99999-0002', 'Banco de Dados', 40),
+('Pedro Oliveira', 'pedro.oliveira@senai.br', '(41) 99999-0003', 'Redes e Infraestrutura', 30),
+('Ana Costa', 'ana.costa@senai.br', '(41) 99999-0004', 'Design e UI/UX', 40);
+
+INSERT INTO competencias (competencia, descricao, carga_horaria) VALUES
+('HTML e CSS', 'Desenvolvimento de páginas web com HTML5 e CSS3', 40),
+('JavaScript', 'Programação JavaScript e frameworks modernos', 60),
+('PHP Backend', 'Desenvolvimento backend com PHP e MySQL', 80),
+('Banco de Dados', 'MySQL, modelagem e consultas SQL', 60),
+('Design Responsivo', 'Criação de layouts responsivos e acessíveis', 40),
+('Git e Versionamento', 'Controle de versão com Git e GitHub', 20);
+
+INSERT INTO cursos (nome, turno, dias_semana, carga_horaria_total, data_inicio, data_fim) VALUES
+('Desenvolvimento Web Full Stack', 'Manhã', 'Segunda,Terça,Quarta,Quinta,Sexta', 400, '2025-01-15', '2025-06-15'),
+('Backend com PHP', 'Tarde', 'Segunda,Quarta,Sexta', 300, '2025-02-01', '2025-07-01'),
+('Frontend Avançado', 'Noite', 'Terça,Quinta', 200, '2025-01-20', '2025-05-20');
+
+-- Relacionar competências aos cursos
+INSERT INTO competencia_comp (IDcompetencia, IDcurso, ordem) VALUES
+(1, 1, 1), (2, 1, 2), (3, 1, 3), (4, 1, 4), (5, 1, 5), (6, 1, 6),
+(3, 2, 1), (4, 2, 2), (6, 2, 3),
+(1, 3, 1), (2, 3, 2), (5, 3, 3);
+
+-- Relacionar professores às competências
+INSERT INTO professor_competencia (IDprofessor, IDcompetencia, nivel_conhecimento) VALUES
+(1, 1, 'expert'), (1, 2, 'avançado'), (1, 3, 'avançado'),
+(2, 3, 'expert'), (2, 4, 'expert'), (2, 6, 'avançado'),
+(3, 4, 'avançado'), (3, 6, 'expert'),
+(4, 1, 'expert'), (4, 2, 'avançado'), (4, 5, 'expert');
