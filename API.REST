@@ -1,0 +1,230 @@
+<?php
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
+header('Access-Control-Allow-Headers: Content-Type');
+
+include '../conexao.php';
+
+$method = $_SERVER['REQUEST_METHOD'];
+$request = isset($_GET['endpoint']) ? $_GET['endpoint'] : '';
+
+// Roteador simples
+switch ($request) {
+    case 'cursos':
+        if ($method == 'GET') {
+            getCursos($conn);
+        } elseif ($method == 'POST') {
+            createCurso($conn);
+        }
+        break;
+        
+    case 'professores':
+        if ($method == 'GET') {
+            getProfessores($conn);
+        } elseif ($method == 'POST') {
+            createProfessor($conn);
+        }
+        break;
+        
+    case 'agenda':
+        if ($method == 'GET') {
+            getAgenda($conn);
+        }
+        break;
+        
+    case 'gerar-calendario':
+        if ($method == 'POST') {
+            gerarCalendario($conn);
+        }
+        break;
+        
+    case 'dashboard':
+        if ($method == 'GET') {
+            getDashboard($conn);
+        }
+        break;
+        
+    default:
+        echo json_encode(['error' => 'Endpoint não encontrado']);
+        break;
+}
+
+// Funções da API
+
+function getCursos($conn) {
+    $sql = "SELECT c.*, 
+            COUNT(DISTINCT cc.IDcompetencia) as total_competencias,
+            (SELECT COUNT(*) FROM agenda a WHERE a.IDcurso = c.IDcurso) as total_aulas
+            FROM cursos c
+            LEFT JOIN competencia_comp cc ON c.IDcurso = cc.IDcurso
+            GROUP BY c.IDcurso
+            ORDER BY c.data_inicio DESC";
+    
+    $result = $conn->query($sql);
+    $cursos = [];
+    
+    while ($row = $result->fetch_assoc()) {
+        $cursos[] = $row;
+    }
+    
+    echo json_encode($cursos);
+}
+
+function createCurso($conn) {
+    $data = json_decode(file_get_contents('php://input'), true);
+    
+    $sql = "INSERT INTO cursos (nome, turno, dias_semana, carga_horaria_total, data_inicio, data_fim) 
+            VALUES (?, ?, ?, ?, ?, ?)";
+    
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("sssiss", 
+        $data['nome'], 
+        $data['turno'], 
+        $data['dias_semana'], 
+        $data['carga_horaria_total'], 
+        $data['data_inicio'], 
+        $data['data_fim']
+    );
+    
+    if ($stmt->execute()) {
+        echo json_encode(['success' => true, 'id' => $conn->insert_id]);
+    } else {
+        echo json_encode(['success' => false, 'error' => $stmt->error]);
+    }
+}
+
+function getProfessores($conn) {
+    $sql = "SELECT p.*, 
+            COUNT(DISTINCT pc.IDcompetencia) as total_competencias,
+            (SELECT COUNT(*) FROM agenda a WHERE a.IDprofessor = p.IDprofessor AND a.status = 'agendado') as aulas_agendadas
+            FROM professor p
+            LEFT JOIN professor_competencia pc ON p.IDprofessor = pc.IDprofessor
+            GROUP BY p.IDprofessor
+            ORDER BY p.nome_professor";
+    
+    $result = $conn->query($sql);
+    $professores = [];
+    
+    while ($row = $result->fetch_assoc()) {
+        $professores[] = $row;
+    }
+    
+    echo json_encode($professores);
+}
+
+function createProfessor($conn) {
+    $data = json_decode(file_get_contents('php://input'), true);
+    
+    $sql = "INSERT INTO professor (nome_professor, email, telefone, especialidade, carga_horaria_semanal) 
+            VALUES (?, ?, ?, ?, ?)";
+    
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("ssssi", 
+        $data['nome'], 
+        $data['email'], 
+        $data['telefone'], 
+        $data['especialidade'], 
+        $data['carga_horaria']
+    );
+    
+    if ($stmt->execute()) {
+        echo json_encode(['success' => true, 'id' => $conn->insert_id]);
+    } else {
+        echo json_encode(['success' => false, 'error' => $stmt->error]);
+    }
+}
+
+function getAgenda($conn) {
+    $filtro = isset($_GET['filtro']) ? $_GET['filtro'] : 'todas';
+    
+    $whereClause = "";
+    $hoje = date('Y-m-d');
+    
+    switch ($filtro) {
+        case 'hoje':
+            $whereClause = "WHERE a.data_aula = '$hoje'";
+            break;
+        case 'semana':
+            $whereClause = "WHERE a.data_aula BETWEEN '$hoje' AND DATE_ADD('$hoje', INTERVAL 7 DAY)";
+            break;
+        case 'mes':
+            $whereClause = "WHERE MONTH(a.data_aula) = MONTH('$hoje') AND YEAR(a.data_aula) = YEAR('$hoje')";
+            break;
+    }
+    
+    $sql = "SELECT a.*, 
+            c.nome as curso_nome,
+            p.nome_professor,
+            comp.competencia
+            FROM agenda a
+            INNER JOIN cursos c ON a.IDcurso = c.IDcurso
+            INNER JOIN professor p ON a.IDprofessor = p.IDprofessor
+            INNER JOIN competencias comp ON a.IDcompetencia = comp.IDcompetencia
+            $whereClause
+            ORDER BY a.data_aula ASC, a.hora_inicio ASC";
+    
+    $result = $conn->query($sql);
+    $agenda = [];
+    
+    while ($row = $result->fetch_assoc()) {
+        $agenda[] = $row;
+    }
+    
+    echo json_encode($agenda);
+}
+
+function gerarCalendario($conn) {
+    include '../gerar_calendario.php';
+    
+    $data = json_decode(file_get_contents('php://input'), true);
+    $idCurso = intval($data['id_curso']);
+    
+    $gerador = new GeradorCalendario($conn);
+    $resultado = $gerador->gerarCalendarioCurso($idCurso);
+    
+    echo json_encode($resultado);
+}
+
+function getDashboard($conn) {
+    $stats = [];
+    
+    // Total de cursos ativos
+    $result = $conn->query("SELECT COUNT(*) as total FROM cursos WHERE status = 'ativo'");
+    $stats['total_cursos'] = $result->fetch_assoc()['total'];
+    
+    // Total de professores ativos
+    $result = $conn->query("SELECT COUNT(*) as total FROM professor WHERE status = 'ativo'");
+    $stats['total_professores'] = $result->fetch_assoc()['total'];
+    
+    // Total de aulas agendadas
+    $result = $conn->query("SELECT COUNT(*) as total FROM agenda WHERE status = 'agendado'");
+    $stats['total_aulas'] = $result->fetch_assoc()['total'];
+    
+    // Total de conflitos não resolvidos
+    $result = $conn->query("SELECT COUNT(*) as total FROM conflitos WHERE resolvido = FALSE");
+    $stats['total_conflitos'] = $result->fetch_assoc()['total'];
+    
+    // Próximas aulas
+    $hoje = date('Y-m-d');
+    $sql = "SELECT a.*, c.nome as curso_nome, p.nome_professor, comp.competencia
+            FROM agenda a
+            INNER JOIN cursos c ON a.IDcurso = c.IDcurso
+            INNER JOIN professor p ON a.IDprofessor = p.IDprofessor
+            INNER JOIN competencias comp ON a.IDcompetencia = comp.IDcompetencia
+            WHERE a.data_aula >= '$hoje' AND a.status = 'agendado'
+            ORDER BY a.data_aula ASC, a.hora_inicio ASC
+            LIMIT 5";
+    
+    $result = $conn->query($sql);
+    $stats['proximas_aulas'] = [];
+    
+    while ($row = $result->fetch_assoc()) {
+        $stats['proximas_aulas'][] = $row;
+    }
+    
+    echo json_encode($stats);
+}
+
+$conn->close();
+?>
