@@ -1,0 +1,498 @@
+# 📅 Sistema de Calendário - SENAI
+## Gestão Automática de Agenda de Professores
+
+Sistema completo de gerenciamento de calendário de aulas com alocação automática de professores desenvolvido para o SENAI.
+
+---
+
+## 🎯 Objetivos do Projeto
+
+- ✅ Gerenciar cursos, professores e competências
+- ✅ Gerar automaticamente calendários de aulas
+- ✅ Alocar professores baseado em competências e disponibilidade
+- ✅ Detectar e registrar conflitos de horários
+- ✅ Interface intuitiva e moderna
+- ✅ Relatórios e estatísticas
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+### Backend
+- **PHP 7.4+** - Linguagem principal
+- **MySQL 8.0+** - Banco de dados
+- **phpMyAdmin** - Gerenciamento do banco
+
+### Frontend
+- **HTML5** - Estrutura
+- **CSS3** - Estilização moderna
+- **JavaScript (Vanilla)** - Interatividade
+- **Responsive Design** - Compatível com todos dispositivos
+
+---
+
+## 📁 Estrutura do Projeto
+
+```
+calendario/
+├── config/
+│   └── conexao.php              # Configuração do banco de dados
+├── api/
+│   └── index.php                # API REST
+├── database/
+│   └── calendario.sql           # Script de criação do banco
+├── frontend/
+│   └── index.html               # Interface principal
+├── gerar_calendario.php         # Gerador automático
+├── exibir_calendario.php        # Visualização de calendário
+└── README.md                    # Documentação
+```
+
+---
+
+## ⚙️ Instalação
+
+### 1. Pré-requisitos
+
+- XAMPP, WAMP, ou servidor com Apache, PHP e MySQL
+- Navegador moderno (Chrome, Firefox, Edge)
+- phpMyAdmin (geralmente incluso no XAMPP/WAMP)
+
+### 2. Configuração do Ambiente
+
+```bash
+# Clone ou baixe o projeto
+# Extraia na pasta htdocs do XAMPP ou www do WAMP
+
+C:\xampp\htdocs\calendario\
+```
+
+### 3. Configurar Banco de Dados
+
+1. **Abra o phpMyAdmin** (http://localhost/phpmyadmin)
+
+2. **Crie o banco de dados**:
+   - Clique em "Novo" no menu lateral
+   - Nome: `calendario`
+   - Collation: `utf8mb4_general_ci`
+   - Clique em "Criar"
+
+3. **Importe o arquivo SQL**:
+   - Selecione o banco `calendario`
+   - Vá na aba "Importar"
+   - Escolha o arquivo `database/calendario.sql`
+   - Clique em "Executar"
+
+### 4. Configurar Conexão
+
+Edite o arquivo `conexao.php`:
+
+```php
+<?php
+$servername = "localhost";
+$username = "root";          // Seu usuário MySQL
+$password = "";              // Sua senha MySQL (geralmente vazia no XAMPP)
+$dbname = "calendario";
+
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+if ($conn->connect_error) {
+    die("Falha na conexão: " . $conn->connect_error);
+}
+
+$conn->set_charset("utf8mb4");
+?>
+```
+
+### 5. Iniciar o Servidor
+
+1. Inicie o XAMPP/WAMP
+2. Ative Apache e MySQL
+3. Acesse: http://localhost/calendario/frontend/index.html
+
+---
+
+## 🚀 Como Usar
+
+### Dashboard
+
+- Visualize estatísticas gerais
+- Veja cursos ativos
+- Monitore professores e aulas
+
+### Gerar Calendário
+
+1. Acesse a aba "Gerar Calendário"
+2. Selecione um curso
+3. Clique em "Gerar Calendário Automaticamente"
+4. O sistema irá:
+   - Buscar todas as competências do curso
+   - Criar datas de aula baseado nos dias da semana
+   - Alocar professores qualificados
+   - Detectar conflitos de horário
+   - Registrar tudo no banco de dados
+
+### Ver Agenda
+
+- Visualize todas as aulas agendadas
+- Filtre por: Todas, Hoje, Esta Semana, Este Mês
+- Veja professor, curso e competência
+
+### Professores
+
+- Liste todos os professores
+- Adicione novos professores
+- Edite informações
+- Visualize competências e carga horária
+
+---
+
+## 🔧 Funcionalidades Principais
+
+### 1. Geração Automática de Calendário
+
+**Algoritmo:**
+
+```
+1. Busca informações do curso (turno, dias da semana, datas)
+2. Lista competências ordenadas
+3. Gera todas as datas de aula possíveis
+4. Distribui competências nas datas (baseado em carga horária)
+5. Para cada aula:
+   - Busca professores qualificados (por competência)
+   - Ordena por nível de conhecimento (expert > avançado > intermediário)
+   - Verifica disponibilidade (sem conflitos de horário)
+   - Aloca professor disponível
+   - Se não houver, registra conflito
+6. Retorna estatísticas da geração
+```
+
+### 2. Detecção de Conflitos
+
+O sistema detecta automaticamente:
+- ✅ Sobreposição de horários
+- ✅ Professores em dois lugares ao mesmo tempo
+- ✅ Carga horária excedida
+- ✅ Professores não qualificados
+
+### 3. Relatórios e Estatísticas
+
+- Total de cursos ativos
+- Total de professores
+- Aulas agendadas
+- Conflitos pendentes
+- Taxa de sucesso na geração
+
+---
+
+## 📊 Estrutura do Banco de Dados
+
+### Tabelas Principais
+
+#### `professor`
+- IDprofessor (PK)
+- nome_professor
+- email
+- telefone
+- especialidade
+- carga_horaria_semanal
+- status
+
+#### `cursos`
+- IDcurso (PK)
+- nome
+- turno (Manhã, Tarde, Noite)
+- dias_semana (Segunda, Terça, etc.)
+- carga_horaria_total
+- data_inicio
+- data_fim
+- status
+
+#### `competencias`
+- IDcompetencia (PK)
+- competencia (nome)
+- descricao
+- carga_horaria
+
+#### `agenda`
+- IDagenda (PK)
+- IDprofessor (FK)
+- IDcurso (FK)
+- IDcompetencia (FK)
+- data_aula
+- hora_inicio
+- hora_fim
+- sala
+- status
+- observacoes
+
+#### `conflitos`
+- IDconflito (PK)
+- IDprofessor (FK)
+- data_conflito
+- hora_inicio
+- hora_fim
+- tipo_conflito
+- descricao
+- resolvido
+
+---
+
+## 🎨 Características do Design
+
+### Visual Moderno
+- Gradientes suaves
+- Animações fluidas
+- Cards interativos
+- Cores do SENAI
+
+### Responsivo
+- Mobile First
+- Adaptável a tablets
+- Desktop otimizado
+
+### UX Intuitiva
+- Navegação clara
+- Feedback visual
+- Modais para ações
+- Loading states
+
+---
+
+## 🔌 API REST
+
+### Endpoints Disponíveis
+
+#### GET `/api/index.php?endpoint=cursos`
+Retorna todos os cursos
+
+#### GET `/api/index.php?endpoint=professores`
+Retorna todos os professores
+
+#### GET `/api/index.php?endpoint=agenda&filtro=todas`
+Retorna agenda (filtros: todas, hoje, semana, mes)
+
+#### GET `/api/index.php?endpoint=dashboard`
+Retorna estatísticas do dashboard
+
+#### POST `/api/index.php?endpoint=gerar-calendario`
+Gera calendário automático
+```json
+{
+  "id_curso": 1
+}
+```
+
+#### POST `/api/index.php?endpoint=professores`
+Cria novo professor
+```json
+{
+  "nome": "Nome do Professor",
+  "email": "email@senai.br",
+  "telefone": "(41) 99999-9999",
+  "especialidade": "Programação",
+  "carga_horaria": 40
+}
+```
+
+---
+
+## 🧪 Testando o Sistema
+
+### 1. Teste Básico
+
+```bash
+# Acesse o sistema
+http://localhost/calendario/frontend/index.html
+
+# Verifique se aparece o dashboard
+# Deve mostrar 3 cursos e 4 professores (dados de exemplo)
+```
+
+### 2. Testar Geração de Calendário
+
+1. Vá em "Gerar Calendário"
+2. Selecione "Desenvolvimento Web Full Stack"
+3. Clique em "Gerar Calendário Automaticamente"
+4. Aguarde 2 segundos
+5. Verifique resultado
+
+### 3. Verificar no Banco
+
+```sql
+-- No phpMyAdmin, execute:
+SELECT * FROM agenda ORDER BY data_aula;
+
+-- Deve listar todas as aulas geradas
+```
+
+---
+
+## 📝 Exemplos de Uso
+
+### Adicionar Novo Curso
+
+```php
+// Via API
+POST /api/index.php?endpoint=cursos
+{
+  "nome": "DevOps e Cloud",
+  "turno": "Noite",
+  "dias_semana": "Segunda,Quarta,Sexta",
+  "carga_horaria_total": 200,
+  "data_inicio": "2025-11-01",
+  "data_fim": "2026-03-01"
+}
+```
+
+### Consultar Agenda de um Professor
+
+```sql
+SELECT a.*, c.nome as curso, comp.competencia
+FROM agenda a
+INNER JOIN cursos c ON a.IDcurso = c.IDcurso
+INNER JOIN competencias comp ON a.IDcompetencia = comp.IDcompetencia
+WHERE a.IDprofessor = 1
+ORDER BY a.data_aula;
+```
+
+### Relatório de Conflitos
+
+```sql
+SELECT p.nome_professor, cf.*, 
+       DATE_FORMAT(cf.data_conflito, '%d/%m/%Y') as data_formatada
+FROM conflitos cf
+INNER JOIN professor p ON cf.IDprofessor = p.IDprofessor
+WHERE cf.resolvido = FALSE;
+```
+
+---
+
+## 🐛 Solução de Problemas
+
+### Erro de Conexão com Banco
+
+```
+Solução:
+1. Verifique se MySQL está ativo no XAMPP
+2. Confirme usuário e senha em conexao.php
+3. Teste conexão no phpMyAdmin
+```
+
+### Calendário Não Gera
+
+```
+Solução:
+1. Verifique se há professores com competências cadastradas
+2. Confirme se o curso tem competências associadas
+3. Veja a tabela professor_competencia
+```
+
+### Interface Não Carrega
+
+```
+Solução:
+1. Verifique se Apache está rodando
+2. Confirme o caminho: htdocs/calendario/
+3. Limpe cache do navegador (Ctrl + F5)
+```
+
+---
+
+## 🔐 Segurança
+
+### Recomendações para Produção
+
+1. **Senhas Fortes**
+```php
+// Use variáveis de ambiente
+$password = getenv('DB_PASSWORD');
+```
+
+2. **Prepared Statements**
+```php
+// Sempre use (já implementado)
+$stmt = $conn->prepare("SELECT * FROM cursos WHERE id = ?");
+```
+
+3. **Validação de Dados**
+```php
+// Valide todas as entradas
+$email = filter_var($_POST['email'], FILTER_VALIDATE_EMAIL);
+```
+
+4. **HTTPS**
+- Use certificado SSL em produção
+- Force redirecionamento HTTPS
+
+---
+
+## 📈 Melhorias Futuras
+
+### Fase 2
+- [ ] Sistema de notificações por email
+- [ ] Exportar calendário para PDF
+- [ ] Integração com Google Calendar
+- [ ] App móvel (React Native)
+
+### Fase 3
+- [ ] IA para otimizar alocação
+- [ ] Análise preditiva de conflitos
+- [ ] Dashboard analytics avançado
+- [ ] Sistema de avaliações
+
+---
+
+## 👥 Contribuindo
+
+Para contribuir com o projeto:
+
+1. Fork o repositório
+2. Crie uma branch (`git checkout -b feature/NovaFuncionalidade`)
+3. Commit suas mudanças (`git commit -m 'Adiciona nova funcionalidade'`)
+4. Push para a branch (`git push origin feature/NovaFuncionalidade`)
+5. Abra um Pull Request
+
+---
+
+## 📄 Licença
+
+Este projeto foi desenvolvido para o SENAI como projeto educacional.
+
+---
+
+## 📞 Suporte
+
+Para dúvidas e suporte:
+- Email: suporte@senai.br
+- Documentação: [Wiki do Projeto]
+
+---
+
+## ✅ Checklist de Implementação
+
+- [x] Estrutura do banco de dados
+- [x] Sistema de conexão
+- [x] Gerador automático de calendário
+- [x] Detecção de conflitos
+- [x] API REST
+- [x] Interface frontend
+- [x] Dashboard com estatísticas
+- [x] CRUD de professores
+- [x] Visualização de agenda
+- [x] Documentação completa
+
+---
+
+## 🎓 Créditos
+
+Desenvolvido como projeto para o **SENAI** - Serviço Nacional de Aprendizagem Industrial
+
+**Tecnologias:** PHP, MySQL, HTML, CSS, JavaScript
+**Objetivo:** Automatizar gestão de calendário de aulas
+
+---
+
+**Versão:** 1.0.0  
+**Data:** Outubro 2025  
+**Status:** ✅ Pronto para uso
