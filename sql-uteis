@@ -1,0 +1,346 @@
+-- ========================================
+-- QUERIES ÚTEIS - Sistema de Calendário SENAI
+-- ========================================
+
+-- 1. RELATÓRIOS DE PROFESSORES
+-- ========================================
+
+-- Professores com maior carga horária alocada
+SELECT 
+    p.nome_professor,
+    COUNT(a.IDagenda) as total_aulas,
+    SUM(TIMESTAMPDIFF(HOUR, a.hora_inicio, a.hora_fim)) as horas_totais,
+    p.carga_horaria_semanal,
+    ROUND((SUM(TIMESTAMPDIFF(HOUR, a.hora_inicio, a.hora_fim)) / p.carga_horaria_semanal) * 100, 2) as percentual_uso
+FROM professor p
+LEFT JOIN agenda a ON p.IDprofessor = a.IDprofessor AND a.status = 'agendado'
+GROUP BY p.IDprofessor
+ORDER BY horas_totais DESC;
+
+-- Professores disponíveis por competência
+SELECT 
+    comp.competencia,
+    GROUP_CONCAT(p.nome_professor SEPARATOR ', ') as professores_disponiveis,
+    COUNT(DISTINCT p.IDprofessor) as total_professores
+FROM competencias comp
+INNER JOIN professor_competencia pc ON comp.IDcompetencia = pc.IDcompetencia
+INNER JOIN professor p ON pc.IDprofessor = p.IDprofessor
+WHERE p.status = 'ativo'
+GROUP BY comp.IDcompetencia
+ORDER BY total_professores DESC;
+
+-- Agenda semanal de um professor específico
+SELECT 
+    DATE_FORMAT(a.data_aula, '%d/%m/%Y') as data,
+    DAYNAME(a.data_aula) as dia_semana,
+    TIME_FORMAT(a.hora_inicio, '%H:%i') as inicio,
+    TIME_FORMAT(a.hora_fim, '%H:%i') as fim,
+    c.nome as curso,
+    comp.competencia
+FROM agenda a
+INNER JOIN cursos c ON a.IDcurso = c.IDcurso
+INNER JOIN competencias comp ON a.IDcompetencia = comp.IDcompetencia
+WHERE a.IDprofessor = 1  -- Alterar ID do professor
+AND a.data_aula BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+ORDER BY a.data_aula, a.hora_inicio;
+
+-- 2. RELATÓRIOS DE CURSOS
+-- ========================================
+
+-- Progresso de cada curso
+SELECT 
+    c.nome as curso,
+    c.carga_horaria_total as horas_planejadas,
+    COUNT(a.IDagenda) as aulas_agendadas,
+    SUM(CASE WHEN a.status = 'realizado' THEN 1 ELSE 0 END) as aulas_realizadas,
+    SUM(TIMESTAMPDIFF(HOUR, a.hora_inicio, a.hora_fim)) as horas_alocadas,
+    ROUND((SUM(TIMESTAMPDIFF(HOUR, a.hora_inicio, a.hora_fim)) / c.carga_horaria_total) * 100, 2) as percentual_conclusao
+FROM cursos c
+LEFT JOIN agenda a ON c.IDcurso = a.IDcurso
+GROUP BY c.IDcurso
+ORDER BY c.data_inicio;
+
+-- Competências restantes de um curso
+SELECT 
+    comp.competencia,
+    comp.carga_horaria as horas_necessarias,
+    COALESCE(COUNT(a.IDagenda), 0) as aulas_agendadas,
+    COALESCE(SUM(TIMESTAMPDIFF(HOUR, a.hora_inicio, a.hora_fim)), 0) as horas_alocadas,
+    comp.carga_horaria - COALESCE(SUM(TIMESTAMPDIFF(HOUR, a.hora_inicio, a.hora_fim)), 0) as horas_restantes
+FROM competencias comp
+INNER JOIN competencia_comp cc ON comp.IDcompetencia = cc.IDcompetencia
+LEFT JOIN agenda a ON comp.IDcompetencia = a.IDcompetencia AND a.IDcurso = cc.IDcurso
+WHERE cc.IDcurso = 1  -- Alterar ID do curso
+GROUP BY comp.IDcompetencia
+ORDER BY cc.ordem;
+
+-- Grade horária de um curso
+SELECT 
+    DATE_FORMAT(a.data_aula, '%d/%m/%Y') as data,
+    DAYNAME(a.data_aula) as dia_semana,
+    TIME_FORMAT(a.hora_inicio, '%H:%i') as inicio,
+    TIME_FORMAT(a.hora_fim, '%H:%i') as fim,
+    p.nome_professor,
+    comp.competencia,
+    a.status
+FROM agenda a
+INNER JOIN professor p ON a.IDprofessor = p.IDprofessor
+INNER JOIN competencias comp ON a.IDcompetencia = comp.IDcompetencia
+WHERE a.IDcurso = 1  -- Alterar ID do curso
+ORDER BY a.data_aula, a.hora_inicio;
+
+-- 3. DETECÇÃO E ANÁLISE DE CONFLITOS
+-- ========================================
+
+-- Conflitos de horário (professores em dois lugares ao mesmo tempo)
+SELECT 
+    a1.data_aula,
+    a1.hora_inicio,
+    a1.hora_fim,
+    p.nome_professor,
+    c1.nome as curso1,
+    c2.nome as curso2
+FROM agenda a1
+INNER JOIN agenda a2 ON a1.IDprofessor = a2.IDprofessor 
+    AND a1.data_aula = a2.data_aula
+    AND a1.IDagenda != a2.IDagenda
+    AND (
+        (a1.hora_inicio BETWEEN a2.hora_inicio AND a2.hora_fim) OR
+        (a1.hora_fim BETWEEN a2.hora_inicio AND a2.hora_fim) OR
+        (a2.hora_inicio BETWEEN a1.hora_inicio AND a1.hora_fim)
+    )
+INNER JOIN professor p ON a1.IDprofessor = p.IDprofessor
+INNER JOIN cursos c1 ON a1.IDcurso = c1.IDcurso
+INNER JOIN cursos c2 ON a2.IDcurso = c2.IDcurso
+WHERE a1.status = 'agendado' AND a2.status = 'agendado';
+
+-- Professores com sobrecarga de horários
+SELECT 
+    p.nome_professor,
+    p.carga_horaria_semanal,
+    WEEK(a.data_aula) as semana,
+    YEAR(a.data_aula) as ano,
+    SUM(TIMESTAMPDIFF(HOUR, a.hora_inicio, a.hora_fim)) as horas_semana,
+    CASE 
+        WHEN SUM(TIMESTAMPDIFF(HOUR, a.hora_inicio, a.hora_fim)) > p.carga_horaria_semanal 
+        THEN 'SOBRECARGA' 
+        ELSE 'OK' 
+    END as status
+FROM professor p
+INNER JOIN agenda a ON p.IDprofessor = a.IDprofessor
+WHERE a.status = 'agendado'
+GROUP BY p.IDprofessor, WEEK(a.data_aula), YEAR(a.data_aula)
+HAVING horas_semana > p.carga_horaria_semanal
+ORDER BY horas_semana DESC;
+
+-- Competências sem professor qualificado
+SELECT 
+    comp.competencia,
+    c.nome as curso,
+    COUNT(DISTINCT pc.IDprofessor) as professores_qualificados
+FROM competencias comp
+INNER JOIN competencia_comp cc ON comp.IDcompetencia = cc.IDcompetencia
+INNER JOIN cursos c ON cc.IDcurso = c.IDcurso
+LEFT JOIN professor_competencia pc ON comp.IDcompetencia = pc.IDcompetencia
+WHERE c.status = 'ativo'
+GROUP BY comp.IDcompetencia, c.IDcurso
+HAVING professores_qualificados = 0;
+
+-- 4. ESTATÍSTICAS GERAIS
+-- ========================================
+
+-- Dashboard geral do sistema
+SELECT 
+    (SELECT COUNT(*) FROM cursos WHERE status = 'ativo') as cursos_ativos,
+    (SELECT COUNT(*) FROM professor WHERE status = 'ativo') as professores_ativos,
+    (SELECT COUNT(*) FROM agenda WHERE status = 'agendado') as aulas_agendadas,
+    (SELECT COUNT(*) FROM agenda WHERE status = 'realizado') as aulas_realizadas,
+    (SELECT COUNT(*) FROM conflitos WHERE resolvido = FALSE) as conflitos_pendentes,
+    (SELECT COUNT(DISTINCT IDprofessor) FROM agenda WHERE data_aula = CURDATE()) as professores_em_aula_hoje;
+
+-- Utilização de salas por período
+SELECT 
+    a.sala,
+    c.turno,
+    COUNT(*) as total_aulas,
+    COUNT(DISTINCT a.data_aula) as dias_ocupados
+FROM agenda a
+INNER JOIN cursos c ON a.IDcurso = c.IDcurso
+WHERE a.sala IS NOT NULL
+GROUP BY a.sala, c.turno
+ORDER BY a.sala, c.turno;
+
+-- Ranking de professores mais alocados
+SELECT 
+    p.nome_professor,
+    p.especialidade,
+    COUNT(a.IDagenda) as total_aulas,
+    COUNT(DISTINCT a.IDcurso) as cursos_diferentes,
+    COUNT(DISTINCT a.IDcompetencia) as competencias_lecionadas
+FROM professor p
+INNER JOIN agenda a ON p.IDprofessor = a.IDprofessor
+WHERE a.status IN ('agendado', 'realizado')
+GROUP BY p.IDprofessor
+ORDER BY total_aulas DESC
+LIMIT 10;
+
+-- 5. QUERIES DE MANUTENÇÃO
+-- ========================================
+
+-- Limpar aulas antigas canceladas (mais de 6 meses)
+DELETE FROM agenda 
+WHERE status = 'cancelado' 
+AND data_aula < DATE_SUB(CURDATE(), INTERVAL 6 MONTH);
+
+-- Marcar conflitos como resolvidos se não há mais sobreposição
+UPDATE conflitos cf
+SET resolvido = TRUE
+WHERE NOT EXISTS (
+    SELECT 1 FROM agenda a
+    WHERE a.IDprofessor = cf.IDprofessor
+    AND a.data_aula = cf.data_conflito
+    AND a.status = 'agendado'
+    AND (
+        (a.hora_inicio BETWEEN cf.hora_inicio AND cf.hora_fim) OR
+        (a.hora_fim BETWEEN cf.hora_inicio AND cf.hora_fim)
+    )
+    HAVING COUNT(*) > 1
+);
+
+-- Atualizar status de aulas passadas
+UPDATE agenda 
+SET status = 'realizado' 
+WHERE status = 'agendado' 
+AND data_aula < CURDATE();
+
+-- 6. VIEWS ÚTEIS
+-- ========================================
+
+-- View: Agenda Completa
+CREATE OR REPLACE VIEW vw_agenda_completa AS
+SELECT 
+    a.IDagenda,
+    a.data_aula,
+    DATE_FORMAT(a.data_aula, '%d/%m/%Y') as data_formatada,
+    DAYNAME(a.data_aula) as dia_semana,
+    TIME_FORMAT(a.hora_inicio, '%H:%i') as hora_inicio_formatada,
+    TIME_FORMAT(a.hora_fim, '%H:%i') as hora_fim_formatada,
+    c.nome as curso,
+    c.turno,
+    p.nome_professor,
+    p.email as email_professor,
+    comp.competencia,
+    a.sala,
+    a.status,
+    a.observacoes
+FROM agenda a
+INNER JOIN cursos c ON a.IDcurso = c.IDcurso
+INNER JOIN professor p ON a.IDprofessor = p.IDprofessor
+INNER JOIN competencias comp ON a.IDcompetencia = comp.IDcompetencia;
+
+-- View: Professor com Competências
+CREATE OR REPLACE VIEW vw_professor_competencias AS
+SELECT 
+    p.IDprofessor,
+    p.nome_professor,
+    p.email,
+    p.especialidade,
+    GROUP_CONCAT(comp.competencia SEPARATOR ', ') as competencias,
+    COUNT(DISTINCT pc.IDcompetencia) as total_competencias
+FROM professor p
+LEFT JOIN professor_competencia pc ON p.IDprofessor = pc.IDprofessor
+LEFT JOIN competencias comp ON pc.IDcompetencia = comp.IDcompetencia
+GROUP BY p.IDprofessor;
+
+-- View: Estatísticas de Curso
+CREATE OR REPLACE VIEW vw_estatisticas_curso AS
+SELECT 
+    c.IDcurso,
+    c.nome as curso,
+    c.turno,
+    c.carga_horaria_total,
+    COUNT(DISTINCT cc.IDcompetencia) as total_competencias,
+    COUNT(DISTINCT a.IDagenda) as total_aulas,
+    COUNT(DISTINCT a.IDprofessor) as professores_envolvidos,
+    SUM(CASE WHEN a.status = 'realizado' THEN 1 ELSE 0 END) as aulas_realizadas,
+    SUM(CASE WHEN a.status = 'agendado' THEN 1 ELSE 0 END) as aulas_agendadas,
+    ROUND((COUNT(DISTINCT a.IDagenda) / (c.carga_horaria_total / 4)) * 100, 2) as percentual_alocacao
+FROM cursos c
+LEFT JOIN competencia_comp cc ON c.IDcurso = cc.IDcurso
+LEFT JOIN agenda a ON c.IDcurso = a.IDcurso
+GROUP BY c.IDcurso;
+
+-- 7. PROCEDURES ÚTEIS
+-- ========================================
+
+-- Procedure: Alocar sala automaticamente
+DELIMITER $$
+CREATE PROCEDURE sp_alocar_sala(
+    IN p_id_agenda INT,
+    IN p_data DATE,
+    IN p_hora_inicio TIME,
+    IN p_hora_fim TIME
+)
+BEGIN
+    DECLARE v_sala VARCHAR(50);
+    
+    -- Buscar primeira sala disponível
+    SELECT CONCAT('Sala ', (FLOOR(RAND() * 10) + 1)) INTO v_sala
+    WHERE NOT EXISTS (
+        SELECT 1 FROM agenda
+        WHERE sala = v_sala
+        AND data_aula = p_data
+        AND status = 'agendado'
+        AND (
+            (hora_inicio BETWEEN p_hora_inicio AND p_hora_fim) OR
+            (hora_fim BETWEEN p_hora_inicio AND p_hora_fim)
+        )
+    )
+    LIMIT 1;
+    
+    -- Atualizar agenda com a sala
+    UPDATE agenda 
+    SET sala = v_sala 
+    WHERE IDagenda = p_id_agenda;
+END$$
+DELIMITER ;
+
+-- 8. CONSULTAS DE BACKUP
+-- ========================================
+
+-- Backup de dados essenciais
+SELECT 'professor' as tabela, COUNT(*) as registros FROM professor
+UNION ALL
+SELECT 'cursos', COUNT(*) FROM cursos
+UNION ALL
+SELECT 'competencias', COUNT(*) FROM competencias
+UNION ALL
+SELECT 'agenda', COUNT(*) FROM agenda
+UNION ALL
+SELECT 'conflitos', COUNT(*) FROM conflitos;
+
+-- Verificar integridade referencial
+SELECT 
+    'Agenda sem professor' as problema, 
+    COUNT(*) as total
+FROM agenda a
+LEFT JOIN professor p ON a.IDprofessor = p.IDprofessor
+WHERE p.IDprofessor IS NULL
+
+UNION ALL
+
+SELECT 
+    'Agenda sem curso', 
+    COUNT(*)
+FROM agenda a
+LEFT JOIN cursos c ON a.IDcurso = c.IDcurso
+WHERE c.IDcurso IS NULL
+
+UNION ALL
+
+SELECT 
+    'Agenda sem competência', 
+    COUNT(*)
+FROM agenda a
+LEFT JOIN competencias comp ON a.IDcompetencia = comp.IDcompetencia
+WHERE comp.IDcompetencia IS NULL;
